@@ -15,7 +15,7 @@ func TestDeleteRandomPod(t *testing.T) {
 	namespace := "workloads"
 	pods := newPods(namespace, 1)
 	client := fake.NewSimpleClientset(pods[0])
-	informerFactory := newInformerFactory(client, namespace)
+	informerFactory := newInformerFactory(client, namespace, "")
 	podChaosMonkey := New(client, informerFactory, namespace, false)
 
 	err := informerFactory.Core().V1().Pods().Informer().GetIndexer().Add(pods[0])
@@ -57,7 +57,7 @@ func TestDeleteRandomPods(t *testing.T) {
 	namespace := "workloads"
 	pods := newPods(namespace, 3)
 	client := fake.NewSimpleClientset(pods[0], pods[1], pods[2])
-	informerFactory := newInformerFactory(client, namespace)
+	informerFactory := newInformerFactory(client, namespace, "")
 	podChaosMonkey := New(client, informerFactory, namespace, false)
 
 	for _, pod := range pods {
@@ -70,7 +70,7 @@ func TestDeleteRandomPods(t *testing.T) {
 	fn := func(keys []string) string { return "workloads/pod0" }
 
 	t.Log("there are three pods in the namespace and the pods are in the cache")
-	t.Logf("delete pod0 not so randomly")
+	t.Logf("delete a pod (pod0) pseudorandomly")
 	err := podChaosMonkey.deleteRandomPod(fn)
 	if err != nil {
 		t.Error(err)
@@ -118,11 +118,15 @@ func newPods(namespace string, count int) []*corev1.Pod {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pod" + strconv.Itoa(i),
 				Namespace: namespace,
-				// Labels: map[string]string{
-				// 	"key": "value",
-				// },
+				//NOTE: label selector do not work by default in unit test,
+				// need to investigate
+				Labels: map[string]string{
+					"key": "value",
+				},
 			},
 			Status: corev1.PodStatus{
+				//NOTE: field selector do not work by default in unit test,
+				// need to investigate
 				Phase: corev1.PodRunning,
 			}})
 	}

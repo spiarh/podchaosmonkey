@@ -18,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	typev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -89,12 +90,13 @@ func newClientset(kubeconfig string) (*kubernetes.Clientset, error) {
 }
 
 // newInformerFactory creates a shared informer to watch the pods in the provided namespace.
-func newInformerFactory(client kubernetes.Interface, namespace string) kubeinformers.SharedInformerFactory {
+func newInformerFactory(client kubernetes.Interface, namespace, labelSelector string) kubeinformers.SharedInformerFactory {
 	return kubeinformers.NewSharedInformerFactoryWithOptions(
 		client,
 		informerResync,
 		kubeinformers.WithNamespace(namespace),
 		kubeinformers.WithTweakListOptions(func(list *metav1.ListOptions) {
+			list.LabelSelector = labelSelector
 			list.FieldSelector = "status.phase=Running"
 		}),
 	)
@@ -102,18 +104,18 @@ func newInformerFactory(client kubernetes.Interface, namespace string) kubeinfor
 
 func main() {
 	var (
-		namespace        string
-		kubeconfig       string
-		deletionInterval time.Duration
-		dryRun           bool
+		namespace, labelSelector string
+		kubeconfig               string
+		deletionInterval         time.Duration
+		dryRun                   bool
 	)
 
 	klog.InitFlags(nil)
 
-	// TODO: add specific labels
 	flag.StringVar(&kubeconfig, "kubeconfig", os.Getenv("KUBECONFIG"), "The path to the kubeconfig, default to in-cluster config if not provided")
 	flag.StringVar(&namespace, "namespace", namespaceDefault, "Namespace to watch")
-	flag.DurationVar(&deletionInterval, "deletion-interval", deletionIntervalDefault, "Sets the interval to trigger the deletion of a pod in the provided namespace")
+	flag.StringVar(&labelSelector, "label-selector", "", "Select specific pods to delete with this labels, format: key=val,key2=val2")
+	flag.DurationVar(&deletionInterval, "deletion-interval", deletionIntervalDefault, "Sets the interval to trigger the deletion of a pod in the watched namespace")
 	flag.BoolVar(&dryRun, "dry-run", dryRunDefault, "Do not actually delete pod, logs only the pod that would be deleted otherwise")
 
 	flag.Parse()
@@ -130,6 +132,7 @@ func main() {
 	}
 
 	zc := zap.NewProductionConfig()
+	zc.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	zc.Level = zap.NewAtomicLevelAt(zapcore.Level(zapcore.Level(logLevel)))
 	z, err := zc.Build()
 	if err != nil {
@@ -139,14 +142,25 @@ func main() {
 
 	client, err := newClientset(kubeconfig)
 	if err != nil {
-		klog.Fatal(err)
+		klog.ErrorS(err, "unable to get a valid kubernetes client")
+		os.Exit(1)
 	}
 
-	klog.InfoS("podchaosmonkey started")
+	if _, err := labels.Parse(labelSelector); err != nil {
+		klog.ErrorS(err, "invalid labels passed from command line",
+			"labels", labelSelector)
+		os.Exit(1)
+	}
+
+	klog.InfoS("podchaosmonkey started",
+		"dry-run", dryRun,
+		"label-slector", labelSelector,
+		"watched-namespace", namespace,
+	)
 
 	// start the informer
 	stopCh := handleSignals()
-	informerFactory := newInformerFactory(client, namespace)
+	informerFactory := newInformerFactory(client, namespace, labelSelector)
 	go informerFactory.Start(stopCh)
 
 	podChaosMonkey := New(client, informerFactory, namespace, dryRun)
@@ -169,7 +183,6 @@ func main() {
 func (p podChaosMonkey) deleteRandomPod(selectorFn func([]string) string) error {
 	ctx := context.Background()
 
-	fmt.Println(p.cache.ListKeys())
 	podKeys := p.cache.ListKeys()
 	if len(podKeys) == 0 {
 		klog.V(3).InfoS("no running pod found in namespace")
