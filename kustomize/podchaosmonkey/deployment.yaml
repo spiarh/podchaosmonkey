@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: podchaosmonkey
+spec:
+  replicas: 1
+  template:
+    spec:
+      automountServiceAccountToken: true
+      containers:
+        - name: podchaosmonkey
+          image: podchaosmonkey
+          args:
+            - -deletion-interval
+            - 15s
+            - -label-selector
+            - "app.kubernetes.io/name=superapp"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            readOnlyRootFilesystem: true
+      enableServiceLinks: false
+      serviceAccountName: podchaosmonkey
+      terminationGracePeriodSeconds: 15
+      securityContext:
+        runAsUser: 65534

@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: superapp
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: superapp
+          image: superapp
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            readOnlyRootFilesystem: true
+      enableServiceLinks: false
+      serviceAccountName: superapp
+      terminationGracePeriodSeconds: 0
+      securityContext:
+        runAsUser: 65534

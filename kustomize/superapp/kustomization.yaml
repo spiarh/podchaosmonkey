@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: workloads
+
+commonLabels:
+  app.kubernetes.io/name: superapp
+
+images:
+  - name: superapp
+    newName: k8s.gcr.io/pause
+    newTag: "3.5"
+
+resources:
+  - ./namespace.yaml
+  - ./deployment.yaml
+  - ./role.yaml
+  - ./rolebinding.yaml
+  - ./serviceaccount.yaml
