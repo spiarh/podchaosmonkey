@@ -154,7 +154,7 @@ func main() {
 
 	klog.InfoS("podchaosmonkey started",
 		"dry-run", dryRun,
-		"label-slector", labelSelector,
+		"label-selector", labelSelector,
 		"watched-namespace", namespace,
 	)
 
